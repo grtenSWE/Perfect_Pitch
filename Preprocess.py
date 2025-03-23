@@ -8,11 +8,15 @@ from matplotlib import pyplot as plt # plotting package
 
 
 class Preprocess:
-    def __init__(self, filename, start_t=0, end_t=None):
+    def __init__(self, filename, start_t=0, end_t=None, n_bins=72, mag_exp=4):
         self.signal, self.sr = self.read_wav(filename, start_t, end_t)
-        self.apply_hpss()  # Separate harmonics & remove percussive noise
+        self.apply_hpss()                               # Separate harmonics & remove percussive noise
         self.apply_dynamic_compression()
         self.mags, self.freqs = self.time_to_freq()
+
+        self.hop_length = int(self.sr * 0.01)           # Number of samples between successive frames
+        self.n_bins = n_bins                            # Number of frequency bins
+        self.mag_exp = mag_exp                          # Magnitude Exponent
 
     def read_wav(self, filename, start_t, end_t):
         signal, sr = librosa.load(filename, sr=None, mono=True, offset=start_t, duration=end_t)
@@ -54,9 +58,26 @@ class Preprocess:
 
         self.signal = self.signal * gain_interp
 
+    def make_symmetric(self, Y):
+        """
+        Ensures the frequency spectrum is symmetric for real-valued time-domain reconstruction.
+        Only needed if you zeroed out or modified one side of the FFT.
+        """
+        N = len(Y)
+        # Preserve DC and Nyquist, and mirror the positive freqs to negative
+        Y_sym = np.zeros_like(Y, dtype=np.complex128)
+        Y_sym[0] = Y[0]  # DC component
+        Y_sym[1:N//2] = Y[1:N//2]
+        Y_sym[N//2+1:] = np.conj(Y[1:N//2][::-1])
+        if N % 2 == 0:  # Nyquist freq for even-length
+            Y_sym[N//2] = Y[N//2]
+        return Y_sym
+
     def time_to_freq(self):
         """ Returns the fourier transform of a signal as well as the corresponding frequencies """
         # In the context of dictionary learning, this is returning the sparse representation matrix A
+
+        ###NEED TO FIX THE ISSUE OF INFO LOSS DURING TRANFORMATION
         n = len(self.signal)
         # Take the Fourier transform
         Y_full = np.fft.fft(self.signal)
@@ -65,15 +86,23 @@ class Preprocess:
     
     def freq_to_time(self, Y=None):
         """ Reconstructs the data after denoising the representation """
+        print("converting to back to signal...")
         if Y is None:
             Y = self.mags
 
+        #Y = self.make_symmetric(Y)
         signal = np.fft.ifft(Y)
         complex_mag = np.linalg.norm(np.imag(signal))
         if complex_mag > 0.01 * np.linalg.norm(signal):
             warn("There is a large complex part to the time domain signal")
         signal = np.real(signal)
         return signal
+    
+    def get_cqt(self, signal):
+        cqt = librosa.cqt(signal, sr=self.sr, hop_length=self.hop_length, n_bins=self.n_bins)
+        cqt_mag = librosa.magphase(cqt)[0]**self.mag_exp
+        cqt_dB = librosa.core.amplitude_to_db(cqt_mag ,ref=np.max)
+        self.cqt = cqt_dB
 
     # -- Frequency filtering methods --
     def keep_top_n_freqs(self, n=200, window=1):
@@ -135,10 +164,10 @@ class Preprocess:
             print("Applying top-N frequency selection...")
             n = self.find_best_n_peaks()
             print(n)
-            self.mags = self.keep_top_n_freqs(n,8)  # Keep n most dominant frequencies
+            self.mags = self.keep_top_n_freqs(n,30)  # Keep n most dominant frequencies
         
         print("Applying magnitude-based filtering...")
-        self.mags = self.keep_top_freqs(0.015*mean_top_freq)  # Remove weak frequencies
+        self.mags = self.keep_top_freqs(0.01*mean_top_freq)  # Remove weak frequencies
         self.plot_freq()
 
     def find_best_n(self, energy_threshold=0.9):
@@ -186,7 +215,16 @@ class Preprocess:
         plt.xlabel("time (second)")
         plt.ylabel("Input signal y")
         plt.show()
-    
+
+    def show_spect(self,Y=None):
+        if Y is None:
+            Y = self.cqt
+        librosa.display.specshow(Y, sr=self.sr, hop_length=int(self.sr * 0.01) , x_axis='time', y_axis='cqt_note', cmap='coolwarm')
+        plt.ylim([librosa.note_to_hz('B2'),librosa.note_to_hz('B6')])
+        plt.title("CQTg")
+        plt.colorbar(format='%+2.0f dB')
+        plt.show()
+
     def print_top_n(self,n=10, mags=None):
         if mags is None:
             mags = self.mags
