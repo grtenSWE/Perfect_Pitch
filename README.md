@@ -12,7 +12,7 @@ Features
 ✅ Fourier Transform-Based Analysis – Extracts dominant frequencies using FFT to enable denoising and spectral analysis.
 ✅ Peak Detection & Spectral Denoising – Filters high-energy frequencies to isolate harmonic content and suppress noise.
 ✅ Deep Learning-Based Transcription – Leverages Spotify’s Basic Pitch model to extract onsets, pitches, and durations for polyphonic transcription.
-✅ MIDI Output Generation – Converts detected notes into playable MIDI files using music21.
+✅ MIDI Output Generation – Converts detected notes into MIDI files.
 ✅ End-to-End Pipeline – Fully automated workflow from raw audio input to MIDI and synthesised waveform output.
 
 ⸻
@@ -29,7 +29,7 @@ Technologies Used
 	•	Librosa – Audio loading, HPSS, and spectral transforms
 	•	NumPy & SciPy – Signal processing and numerical operations
 	•	Matplotlib – Spectrogram and waveform visualisation
-	•	music21 – MIDI file generation and music representation
+	•	music21 – music representation
 	•	Spotify’s Basic Pitch – Deep learning model for real-time audio-to-MIDI transcription
 
 ⸻
